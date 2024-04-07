@@ -1,0 +1,83 @@
+name: next-drupal
+recipe: drupal10
+config:
+  php: "8.2"
+  webroot: drupal/web
+  composer_version: 2
+  xdebug: TRUE
+  config:
+    php: .lando/php.ini
+services:
+  database:
+    portforward: 34567
+  appserver:
+    # Install dependencies when building lando.
+    build:
+      - "cd drupal && composer install"
+      - echo "export PATH=/app/drupal/vendor/bin:${PATH}" >> /var/www/.bashrc
+    overrides:
+      environment:
+        PHP_SENDMAIL_PATH: '/usr/sbin/sendmail -S mailhog:1025'
+        PHP_IDE_CONFIG: "serverName=next-drupal"
+        DRUSH_OPTIONS_URI: "https://next-drupal.lndo.site"
+        DRUSH_OPTIONS_ROOT: '/app/docroot'
+        DRUPAL_REVALIDATE_SECRET: revalidate_secret_not_secure_used_only_locally
+        DRUPAL_CLIENT_SECRET: drupal_client_secret_not_secure_used_only_locally
+        DRUPAL_CLIENT_ID: drupal-client-id
+  node:
+    type: node:20
+    ssl: true
+    sslExpose: true
+    overrides:
+      ports:
+        - "3000:3000"
+        - "6006:6006"
+      environment:
+        DRUPAL_REVALIDATE_SECRET: revalidate_secret_not_secure_used_only_locally
+        DRUPAL_CLIENT_SECRET: drupal_client_secret_not_secure_used_only_locally
+        DRUPAL_CLIENT_ID: drupal-client-id
+        NEXT_PUBLIC_DRUPAL_BASE_URL: https://next-drupal.lndo.site
+        NEXT_IMAGE_DOMAIN: next-drupal.lndo.site
+        NEXT_PUBLIC_FRONTEND_URL: https://frontend.lndo.site
+        # Environment variables for next_auth:
+        NEXTAUTH_SECRET: nextauth_secret_not_secure_used_only_locally
+        NEXTAUTH_URL: https://frontend.lndo.site
+    build:
+      - "cd next && npm install"
+    scanner: false
+  mailhog:
+    type: mailhog
+    hogfrom:
+      - appserver
+tooling:
+  grumphp:
+    description: "Runs grumphp commands"
+    cmd:
+      - appserver: ./drupal/vendor/bin/grumphp
+  npm:
+    description: "Runs npm commands"
+    service: node
+    dir: /app/next
+  npm-stop:
+    cmd:
+      - node: kill $(ps aux | grep 'npm\|node' | awk '{print $2}')
+  composer:
+    dir: /app/drupal
+  drush:
+    cmd: /app/drupal/vendor/bin/drush
+  xdebug:
+    description: "Loads Xdebug in the selected mode"
+    cmd:
+      - appserver: /app/.lando/xdebug.sh
+    user: root
+  generate-oauth-keys:
+    description: "Generates a pair of public and private keys into the oauth directory"
+    cmd:
+      - appserver: /app/.lando/generate_oauth_keys.sh
+    dir: /app/drupal/oauth
+    user: www-data
+proxy:
+  mailhog:
+    - mail.lndo.site
+  node:
+    - frontend.lndo.site:3000
